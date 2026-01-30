@@ -939,7 +939,7 @@ export class Cluster extends ClusterBase {
     return new ImportedCluster(scope, id, attrs);
   }
 
-  private accessEntries: Map<string, IAccessEntry> = new Map();
+  private accessEntries: Map<iam.IPrincipal, IAccessEntry> = new Map();
 
   /**
    * The VPC in which this Cluster was created
@@ -1300,7 +1300,7 @@ export class Cluster extends ClusterBase {
 
       // give the handler role admin access to the cluster
       // so it can deploy/query any resource.
-      this._clusterAdminAccess = this.grantClusterAdmin('ClusterAdminRoleAccess', this._kubectlProvider?.role!.roleArn);
+      this._clusterAdminAccess = this.grantClusterAdmin('ClusterAdminRoleAccess', this._kubectlProvider?.role!);
 
       // Ensure kubectl is marked as ready only after admin access has been granted
       this._kubectlReadyBarrier.node.addDependency(this._clusterAdminAccess);
@@ -1309,7 +1309,7 @@ export class Cluster extends ClusterBase {
     // do not create a masters role if one is not provided. Trusting the accountRootPrincipal() is too permissive.
     if (props.mastersRole) {
       const mastersRole = props.mastersRole;
-      this.grantAccess('mastersRoleAccess', props.mastersRole.roleArn, [
+      this.grantAccess('mastersRoleAccess', props.mastersRole, [
         AccessPolicy.fromAccessPolicyName('AmazonEKSClusterAdminPolicy', {
           accessScopeType: AccessScopeType.CLUSTER,
         }),
@@ -1368,7 +1368,7 @@ export class Cluster extends ClusterBase {
    * @param accessPolicies - An array of `IAccessPolicy` objects that define the access permissions to be granted to the IAM principal.
    */
   @MethodMetadata()
-  public grantAccess(id: string, principal: string, accessPolicies: IAccessPolicy[]) {
+  public grantAccess(id: string, principal: iam.IPrincipal, accessPolicies: IAccessPolicy[]) {
     this.addToAccessEntry(id, principal, accessPolicies);
   }
 
@@ -1385,7 +1385,7 @@ export class Cluster extends ClusterBase {
    * @returns the access entry construct
    */
   @MethodMetadata()
-  public grantClusterAdmin(id: string, principal: string): AccessEntry {
+  public grantClusterAdmin(id: string, principal: iam.IPrincipal): AccessEntry {
     const newEntry = new AccessEntry(this, id, {
       principal,
       cluster: this,
@@ -1660,7 +1660,7 @@ export class Cluster extends ClusterBase {
    *
    * @returns {void}
    */
-  private addToAccessEntry(id: string, principal: string, policies: IAccessPolicy[]) {
+  private addToAccessEntry(id: string, principal: iam.IPrincipal, policies: IAccessPolicy[]) {
     const entry = this.accessEntries.get(principal);
     if (entry) {
       (entry as AccessEntry).addAccessPolicies(policies);

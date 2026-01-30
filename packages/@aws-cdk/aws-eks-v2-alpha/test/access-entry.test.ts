@@ -1,4 +1,5 @@
 import { Template } from 'aws-cdk-lib/assertions';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { App, Stack } from 'aws-cdk-lib/core';
 import {
   AccessEntry, AccessEntryProps, AccessEntryType,
@@ -11,6 +12,7 @@ describe('AccessEntry', () => {
   let cluster: Cluster;
   let mockAccessPolicies: IAccessPolicy[];
   let mockProps: AccessEntryProps;
+  let mockRole: iam.Role;
 
   beforeEach(() => {
     app = new App();
@@ -29,10 +31,15 @@ describe('AccessEntry', () => {
       },
     ];
 
+    mockRole = new iam.Role(stack, 'MockRole', {
+      roleName: 'mock-role',
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+    });
+
     mockProps = {
       cluster,
       accessPolicies: mockAccessPolicies,
-      principal: 'mock-principal-arn',
+      principal: mockRole,
     };
   });
 
@@ -41,13 +48,15 @@ describe('AccessEntry', () => {
     new AccessEntry(stack, 'AccessEntry', {
       cluster,
       accessPolicies: mockAccessPolicies,
-      principal: 'mock-principal-arn',
+      principal: mockRole,
     });
 
     // THEN
     Template.fromStack(stack).hasResourceProperties('AWS::EKS::AccessEntry', {
       ClusterName: { Ref: 'ClusterEB0386A7' },
-      PrincipalArn: 'mock-principal-arn',
+      PrincipalArn: {
+        'Fn::GetAtt': ['MockRole0083791A', 'Arn'],
+      },
       AccessPolicies: [
         {
           AccessScope: {
@@ -67,14 +76,16 @@ describe('AccessEntry', () => {
       new AccessEntry(stack, `AccessEntry-${accessEntryType}`, {
         cluster,
         accessPolicies: mockAccessPolicies,
-        principal: 'mock-principal-arn',
+        principal: mockRole,
         accessEntryType,
       });
 
       // THEN
       Template.fromStack(stack).hasResourceProperties('AWS::EKS::AccessEntry', {
         ClusterName: { Ref: 'ClusterEB0386A7' },
-        PrincipalArn: 'mock-principal-arn',
+        PrincipalArn: {
+          'Fn::GetAtt': ['MockRole0083791A', 'Arn'],
+        },
         Type: accessEntryType,
       });
     },
@@ -92,7 +103,9 @@ describe('AccessEntry', () => {
     // THEN
     Template.fromStack(stack).hasResourceProperties('AWS::EKS::AccessEntry', {
       ClusterName: { Ref: 'ClusterEB0386A7' },
-      PrincipalArn: mockProps.principal,
+      PrincipalArn: {
+        'Fn::GetAtt': ['MockRole0083791A', 'Arn'],
+      },
       AccessPolicies: [
         { PolicyArn: mockProps.accessPolicies[0].policy },
         {
@@ -133,4 +146,5 @@ describe('AccessEntry', () => {
 
     Template.fromStack(stack).resourceCountIs('AWS::EKS::AccessEntry', 0);
   });
+  // TODO: add test for AccessEntryType and User, Role variations.
 });

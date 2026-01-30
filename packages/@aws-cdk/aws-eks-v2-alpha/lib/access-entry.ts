@@ -1,5 +1,6 @@
 import { CfnAccessEntry } from 'aws-cdk-lib/aws-eks';
-import { Resource, IResource, Aws, Lazy } from 'aws-cdk-lib/core';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { Resource, IResource, Aws, Lazy, ValidationError } from 'aws-cdk-lib/core';
 import { memoizedGetter } from 'aws-cdk-lib/core/lib/helpers-internal';
 import { MethodMetadata, addConstructMetadata } from 'aws-cdk-lib/core/lib/metadata-resource';
 import { propertyInjectable } from 'aws-cdk-lib/core/lib/prop-injectable';
@@ -285,7 +286,7 @@ export interface AccessEntryProps {
   /**
    * The Amazon Resource Name (ARN) of the principal (user or role) to associate the access entry with.
    */
-  readonly principal: string;
+  readonly principal: iam.IPrincipal;
 }
 
 /**
@@ -318,7 +319,7 @@ export class AccessEntry extends Resource implements IAccessEntry {
   }
   private resource: CfnAccessEntry;
   private cluster: ICluster;
-  private principal: string;
+  private principal: iam.IPrincipal;
   private accessPolicies: IAccessPolicy[];
 
   constructor(scope: Construct, id: string, props: AccessEntryProps ) {
@@ -329,10 +330,26 @@ export class AccessEntry extends Resource implements IAccessEntry {
     this.cluster = props.cluster;
     this.principal = props.principal;
     this.accessPolicies = props.accessPolicies;
+    let principalArn: string;
+    if (AccessEntryType.STANDARD) {
+      if ('roleArn' in this.principal) {
+        principalArn = (this.principal as iam.IRole).roleArn;
+      } else if ('userArn' in this.principal) {
+        principalArn = (this.principal as iam.IUser).userArn;
+      } else {
+        throw new ValidationError('Principal must implement IRole or IUser interface', this);
+      }
+    } else {
+      if ('roleArn' in this.principal) {
+        principalArn = (this.principal as iam.IRole).roleArn;
+      } else {
+        throw new ValidationError('For AccessEntryType other than STANDARD, only Role can be set.', this);
+      }
+    }
 
     this.resource = new CfnAccessEntry(this, 'Resource', {
       clusterName: this.cluster.clusterName,
-      principalArn: this.principal,
+      principalArn: principalArn,
       type: props.accessEntryType,
       accessPolicies: Lazy.any({
         produce: () => this.accessPolicies.map(p => ({
