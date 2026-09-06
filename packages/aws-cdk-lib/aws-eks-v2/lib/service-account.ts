@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import type { ICluster } from './cluster';
+import { CfnPodIdentityAssociation } from './eks.generated';
 import { KubernetesManifest } from './k8s-manifest';
-import { CfnPodIdentityAssociation } from '../../aws-eks';
 import type { AddToPrincipalPolicyResult, IPrincipal, IRole, IRoleRef, PrincipalPolicyFragment } from '../../aws-iam';
 import {
   OpenIdConnectPrincipal, PolicyStatement, Role,

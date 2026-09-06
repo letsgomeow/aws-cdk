@@ -1,4 +1,21 @@
 {
+  "/eks-pod-identities-v2": [
+    {
+      "type": "aws:cdk:acknowledged-rules",
+      "data": {
+        "CloudFormation-Validate::W3010": "Literal AZs in template are the result of accessing stack.availabilityZones, this is expected and safe"
+      },
+      "trace": [
+        "    at Validations.acknowledge (/home/m5295/work/github-letsgomeow/aws-cdk/packages/aws-cdk-lib/core/lib/validation/validations.js:123:18)",
+        "    at EksPodIdentitiesStack._silenceLiteralAzWarning (/home/m5295/work/github-letsgomeow/aws-cdk/packages/aws-cdk-lib/core/lib/stack.js:1481:49)",
+        "    at get availabilityZones (/home/m5295/work/github-letsgomeow/aws-cdk/packages/aws-cdk-lib/core/lib/stack.js:862:18)",
+        "    at new Vpc (/home/m5295/work/github-letsgomeow/aws-cdk/packages/aws-cdk-lib/aws-ec2/lib/vpc.js:839:48)",
+        "    at new EksPodIdentitiesStack (/home/m5295/work/github-letsgomeow/aws-cdk/packages/@aws-cdk-testing/framework-integ/test/aws-eks-v2/test/integ.eks-pod-identities.js:59:21)",
+        "    at <anonymous> (/home/m5295/work/github-letsgomeow/aws-cdk/packages/@aws-cdk-testing/framework-integ/test/aws-eks-v2/test/integ.eks-pod-identities.js:130:15)",
+        "    ...node internals..."
+      ]
+    }
+  ],
   "/eks-pod-identities-v2/VPC": [
     {
       "type": "aws:cdk:analytics:construct",
