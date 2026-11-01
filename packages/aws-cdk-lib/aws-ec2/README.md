@@ -296,6 +296,16 @@ regions you want to deploy to.
 > and if they become unavailable or are terminated for any reason,
 > will not be restarted or replaced.
 
+By default, the NAT instances install `iptables-services` on boot. Other boot-time
+processes can interfere with that install, so the default user data retries it for
+up to about 5 minutes, and fails the user data script if every attempt fails. This
+is controlled by the `@aws-cdk/aws-ec2:natInstanceV2RetryIptablesInstall` feature
+flag. Enabling the flag changes the user data of existing NAT instances, so
+CloudFormation restarts them once and, because the NAT instances have no Elastic IP,
+they come back with new public IPs. If you pass your own `userData` and spread
+`NatInstanceProviderV2.DEFAULT_USER_DATA_COMMANDS` into it, you get the retry
+regardless of the flag.
+
 By default, the NAT instances will route all traffic. To control what traffic
 gets routed, pass a custom value for `defaultAllowedTraffic` and access the
 `NatInstanceProvider.connections` member after having passed the NAT provider to

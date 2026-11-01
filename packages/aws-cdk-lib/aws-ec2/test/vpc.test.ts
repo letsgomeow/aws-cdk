@@ -2,7 +2,7 @@ import { testDeprecated } from '@aws-cdk/cdk-build-tools';
 import { acknowledgeTestValidationRules } from './util';
 import { Annotations, Match, Template } from '../../assertions';
 import { App, CfnOutput, CfnResource, Duration, Fn, Lazy, Stack, Tags, Token } from '../../core';
-import { EC2_REQUIRE_PRIVATE_SUBNETS_FOR_EGRESSONLYINTERNETGATEWAY, EC2_RESTRICT_DEFAULT_SECURITY_GROUP } from '../../cx-api';
+import { EC2_NAT_INSTANCE_V2_RETRY_IPTABLES_INSTALL, EC2_REQUIRE_PRIVATE_SUBNETS_FOR_EGRESSONLYINTERNETGATEWAY, EC2_RESTRICT_DEFAULT_SECURITY_GROUP } from '../../cx-api';
 import type { NatInstanceProps } from '../lib';
 import {
   AclCidr,
@@ -20,6 +20,7 @@ import {
   NatProvider,
   NatGatewayProvider,
   NatInstanceProvider,
+  NatInstanceProviderV2,
   NatTrafficDirection,
   NetworkAcl,
   NetworkAclEntry,
@@ -2211,6 +2212,99 @@ describe('vpc', () => {
             IpProtocol: '-1',
           },
         ],
+      });
+    });
+
+    const retryInstallCommand = [
+      'n=0',
+      'until yum install iptables-services -y; do',
+      '  n=$((n+1))',
+      '  [ $n -ge 30 ] && exit 1',
+      '  echo "yum install failed, retrying in 10 seconds..."',
+      '  sleep 10',
+      'done',
+    ].join('\n');
+    const natInstanceV2UserData = (installCommand: string) => [
+      '#!/bin/bash',
+      installCommand,
+      'systemctl enable iptables',
+      'systemctl start iptables',
+      'echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/custom-ip-forwarding.conf',
+      'sudo sysctl -p /etc/sysctl.d/custom-ip-forwarding.conf',
+      "sudo /sbin/iptables -t nat -A POSTROUTING -o $(route | awk '/^default/{print $NF}') -j MASQUERADE",
+      'sudo /sbin/iptables -F FORWARD',
+      'sudo service iptables save',
+    ].join('\n');
+
+    test.each([
+      [true, retryInstallCommand],
+      [false, 'yum install iptables-services -y'],
+    ])('NAT instances V2 default user data with natInstanceV2RetryIptablesInstall=%s', (flag, installCommand) => {
+      // GIVEN
+      const app = new App({ context: { [EC2_NAT_INSTANCE_V2_RETRY_IPTABLES_INSTALL]: flag } });
+      const stack = new Stack(app, 'TestStack', { env: { account: '123456789012', region: 'us-east-1' } });
+      acknowledgeTestValidationRules(stack);
+
+      // WHEN
+      const natGatewayProvider = NatProvider.instanceV2({
+        instanceType: new InstanceType('q86.mega'),
+        machineImage: new GenericLinuxImage({
+          'us-east-1': 'ami-1',
+        }),
+      });
+      new Vpc(stack, 'TheVPC', { natGatewayProvider });
+
+      // THEN
+      Template.fromStack(stack).hasResourceProperties('AWS::EC2::Instance', {
+        UserData: { 'Fn::Base64': natInstanceV2UserData(installCommand) },
+      });
+    });
+
+    test.each([true, false])('NAT instances V2 custom user data is not affected by natInstanceV2RetryIptablesInstall=%s', (flag) => {
+      // GIVEN
+      const app = new App({ context: { [EC2_NAT_INSTANCE_V2_RETRY_IPTABLES_INSTALL]: flag } });
+      const stack = new Stack(app, 'TestStack', { env: { account: '123456789012', region: 'us-east-1' } });
+      acknowledgeTestValidationRules(stack);
+      const userData = UserData.forLinux();
+      userData.addCommands('echo "hello world!"');
+
+      // WHEN
+      const natGatewayProvider = NatProvider.instanceV2({
+        instanceType: new InstanceType('q86.mega'),
+        machineImage: new GenericLinuxImage({
+          'us-east-1': 'ami-1',
+        }),
+        userData,
+      });
+      new Vpc(stack, 'TheVPC', { natGatewayProvider });
+
+      // THEN
+      Template.fromStack(stack).hasResourceProperties('AWS::EC2::Instance', {
+        UserData: { 'Fn::Base64': '#!/bin/bash\necho "hello world!"' },
+      });
+    });
+
+    test.each([true, false])('NAT instances V2 DEFAULT_USER_DATA_COMMANDS retries the install with natInstanceV2RetryIptablesInstall=%s', (flag) => {
+      // GIVEN
+      const app = new App({ context: { [EC2_NAT_INSTANCE_V2_RETRY_IPTABLES_INSTALL]: flag } });
+      const stack = new Stack(app, 'TestStack', { env: { account: '123456789012', region: 'us-east-1' } });
+      acknowledgeTestValidationRules(stack);
+      const userData = UserData.forLinux();
+      userData.addCommands(...NatInstanceProviderV2.DEFAULT_USER_DATA_COMMANDS, 'echo "hello world!"');
+
+      // WHEN
+      const natGatewayProvider = NatProvider.instanceV2({
+        instanceType: new InstanceType('q86.mega'),
+        machineImage: new GenericLinuxImage({
+          'us-east-1': 'ami-1',
+        }),
+        userData,
+      });
+      new Vpc(stack, 'TheVPC', { natGatewayProvider });
+
+      // THEN
+      Template.fromStack(stack).hasResourceProperties('AWS::EC2::Instance', {
+        UserData: { 'Fn::Base64': `${natInstanceV2UserData(retryInstallCommand)}\necho "hello world!"` },
       });
     });
 
